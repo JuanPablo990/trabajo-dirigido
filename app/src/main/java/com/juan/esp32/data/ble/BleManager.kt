@@ -28,7 +28,7 @@ class BleManager(private val context: Context) {
         RECONNECTING     // 🟡 Amarillo (parpadeante)
     }
 
-    // Callback para enviar JSON
+    // Callback para enviar JSON al repositorio
     var onDataReceived: ((JSONObject) -> Unit)? = null
 
     fun connect() {
@@ -134,7 +134,10 @@ class BleManager(private val context: Context) {
             try {
                 val json = JSONObject(text)
                 Log.d(TAG, "📥 Datos recibidos: ${json.length()} campos")
+
+                // ✅ ENVIAR DATOS AL REPOSITORIO
                 onDataReceived?.invoke(json)
+
             } catch (e: Exception) {
                 Log.e(TAG, "Error al parsear JSON: ${e.message}")
                 Log.d(TAG, "Texto recibido: $text")
@@ -178,6 +181,8 @@ class BleManager(private val context: Context) {
     fun close() {
         disconnect()
         scope.cancel()
+        // Limpiar el callback cuando se cierre
+        onDataReceived = null
         Log.d(TAG, "BleManager cerrado")
     }
 }

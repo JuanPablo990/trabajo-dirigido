@@ -8,10 +8,8 @@ import com.juan.esp32.data.storage.FileManager
 import com.juan.esp32.domain.models.SensorData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -21,10 +19,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Implementación del repositorio que centraliza todas las operaciones de datos
- * de sensores del ESP32. Actúa como única fuente de verdad para la aplicación.
+ * Repositorio Singleton - Única fuente de verdad para los datos del ESP32
  */
-class SensorRepositoryImpl(
+class SensorRepositoryImpl private constructor(
     private val context: Context,
     private val bleManager: BleManager,
     private val fileManager: FileManager
@@ -60,57 +57,19 @@ class SensorRepositoryImpl(
     override val lastPanicEvent: StateFlow<PanicEventDto?>
         get() = _lastPanicEvent
 
-    /**
-     * Inicia la conexión BLE con el ESP32
-     */
     override fun connectToEsp32() {
         bleManager.connect()
     }
 
-    /**
-     * Desconecta del ESP32
-     */
     override fun disconnectFromEsp32() {
         bleManager.disconnect()
     }
 
-    /**
-     * Cierra todos los recursos del repositorio
-     */
     override fun close() {
         bleManager.close()
         fileManager.close()
     }
 
-    /**
-     * Maneja datos entrantes del ESP32
-     */
-    private fun handleIncomingSensorData(json: JSONObject) {
-        coroutineScope.launch {
-            try {
-                val dto = SensorReadingDto.fromJsonObject(json)
-                dto?.let { sensorDto ->
-                    // Convertir a domain model
-                    val sensorData = sensorDto.toSensorData()
-
-                    // Actualizar flow
-                    _sensorDataFlow.value = sensorData
-
-                    // Guardar en almacenamiento local
-                    fileManager.appendDailyData(sensorData)
-
-                    // Log para debug
-                    println("📊 Datos guardados: ${sensorData.timestamp}")
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    /**
-     * Registra un evento de pánico manual
-     */
     override fun triggerPanicEvent(sensorData: SensorData?) {
         coroutineScope.launch {
             val panicEvent = if (sensorData != null) {
@@ -128,7 +87,6 @@ class SensorRepositoryImpl(
                     obj = sensorData.objTemp.toDouble(),
                     amb = sensorData.ambTemp.toDouble()
                 )
-
                 PanicEventDto.createManualPanic(sensorDto)
             } else {
                 PanicEventDto.createManualPanic()
@@ -139,17 +97,24 @@ class SensorRepositoryImpl(
 
             // Guardar en archivo
             fileManager.writeLine("PANIC_EVENT,${panicEvent.toCsvLine()}")
-
-            // Aquí podrías añadir lógica adicional:
-            // - Vibrar el dispositivo
-            // - Reproducir sonido
-            // - Enviar notificación
         }
     }
 
-    /**
-     * Obtiene todos los archivos CSV del mes actual
-     */
+    private fun handleIncomingSensorData(json: JSONObject) {
+        coroutineScope.launch {
+            try {
+                val dto = SensorReadingDto.fromJsonObject(json)
+                dto?.let { sensorDto ->
+                    val sensorData = sensorDto.toSensorData()
+                    _sensorDataFlow.value = sensorData
+                    fileManager.appendDailyData(sensorData)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     override suspend fun getCurrentMonthFiles(): List<File> = withContext(Dispatchers.IO) {
         try {
             val dateFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault())
@@ -171,9 +136,6 @@ class SensorRepositoryImpl(
         }
     }
 
-    /**
-     * Obtiene estadísticas de los datos del día actual
-     */
     override suspend fun getTodayStats(): Map<String, Any> = withContext(Dispatchers.IO) {
         val stats = mutableMapOf<String, Any>()
 
@@ -200,9 +162,6 @@ class SensorRepositoryImpl(
         stats
     }
 
-    /**
-     * Limpia archivos antiguos (más de 30 días)
-     */
     override suspend fun cleanupOldFiles(daysToKeep: Int): Int = withContext(Dispatchers.IO) {
         var deletedCount = 0
 
@@ -234,11 +193,25 @@ class SensorRepositoryImpl(
 
         deletedCount
     }
+
+    companion object {
+        @Volatile
+        private var INSTANCE: SensorRepositoryImpl? = null
+
+        fun getInstance(context: Context): SensorRepositoryImpl {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: createInstance(context).also { INSTANCE = it }
+            }
+        }
+
+        private fun createInstance(context: Context): SensorRepositoryImpl {
+            val bleManager = BleManager(context)
+            val fileManager = FileManager(context)
+            return SensorRepositoryImpl(context, bleManager, fileManager)
+        }
+    }
 }
 
-/**
- * Interfaz del repositorio (opcional pero recomendada para testing)
- */
 interface SensorRepository {
     val sensorData: StateFlow<SensorData?>
     val connectionState: StateFlow<BleManager.ConnectionState>
@@ -254,13 +227,10 @@ interface SensorRepository {
     suspend fun cleanupOldFiles(daysToKeep: Int): Int
 }
 
-/**
- * Extensión para calcular frecuencia cardíaca estimada (añade esto a tu SensorData.kt)
- */
+// Extensión para calcular frecuencia cardíaca estimada
 private fun SensorData.getHeartRateEstimation(): Int {
     return if (red > 0 && ir > 0) {
         val ratio = red.toFloat() / ir.toFloat()
-        // Fórmula simplificada para estimación
         (60 + (ratio * 40)).toInt().coerceIn(40, 180)
     } else {
         0
