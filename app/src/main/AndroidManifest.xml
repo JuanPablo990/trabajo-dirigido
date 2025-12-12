@@ -8,16 +8,15 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <!-- Request both location permissions if needed -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- ✅ YA LO TIENES, NO CAMBIAR -->
     <uses-permission android:name="android.permission.INTERNET" />
+
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- Permissions for your specific foreground service types -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
-
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"
@@ -48,9 +47,6 @@
             android:exported="false"
             android:foregroundServiceType="dataSync|connectedDevice"
             tools:targetApi="31" />
-
-        <!-- Removed the incorrect WorkManagerInitializer provider -->
-        <!-- Removed the unused PermissionActivity entry -->
 
     </application>
 </manifest>
